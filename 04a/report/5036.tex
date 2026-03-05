@@ -1,0 +1,456 @@
+\documentclass[a4paper,11pt]{jsarticle}
+\usepackage[dvipdfmx]{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{url}
+\usepackage{geometry}
+\usepackage{booktabs}
+
+% マージン設定 (A4)
+\geometry{left=25mm,right=25mm,top=25mm,bottom=25mm}
+
+% コード掲載用の設定
+\lstset{
+    language=C,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\bfseries\color{blue},
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    stepnumber=1,
+    breaklines=true,
+    tabsize=4,
+    captionpos=b
+}
+
+\begin{document}
+
+% --- 表紙 (Cover Page) ---
+\begin{titlepage}
+    \centering
+
+    \vspace*{3cm}
+    
+    {\LARGE プログラミングBレポート \par}
+    
+    \vspace{2cm}
+    
+    {\LARGE 課題4A \par}
+    {\LARGE (ミトコンドリア・イブの出現シミュレーション)\par}
+    
+    \vspace{4cm}
+    
+    % 提出日は「自分が提出する日」 
+    {\large 提出年月日：令和8年2月4日 \par} 
+
+    \vspace{1cm}
+    
+    {\large 担当教員：武政 淳二 先生 \par}
+
+    \vspace{4cm}
+    
+    {\large 提出者 \par}
+    
+    \vspace{1cm}
+    
+    {\Large 学籍番号: 09B25036}
+    
+    \vspace{0.5cm}
+    
+    {\Large 氏名: HU XIANDONG}
+    
+    \vfill
+\end{titlepage}
+
+% --- 本文開始 ---
+\section{課題内容}
+本課題では、基本課題および発展課題4A「ミトコンドリア・イブの出現シミュレーション」に取り組んだ。
+具体的には、固定された人口 $N$ の集団において、世代交代に伴い「ミトコンドリア・イブ（現生人類の共通女系祖先）」がどのように出現し、変化するかをシミュレーションするプログラムを作成した。
+実装にあたっては、以下の要件を満たすことが求められている。
+\begin{itemize}
+    \item 世代ごとの個体情報を保存する記憶領域を動的に確保（malloc）すること。
+    \item 不要になった領域を適切に解放（free）し、メモリリークを防ぐこと。
+\end{itemize}
+
+\section{アルゴリズムの説明}
+% 特定の言語に依存しない説明
+本節では、ミトコンドリア・イブを特定し、世代交代を行うための一般的な手順を述べる。
+
+\subsection{シミュレーションの流れ}
+\begin{enumerate}
+    \item 初期化：第0世代の $N$ 人の個体を生成する。この時点では母親は存在しない。
+    \item 世代交代：以下の手順を、指定された世代数上限 $G$ まで繰り返す。
+    \begin{enumerate}
+        \item 新しい世代の $N$ 人の個体を生成する。各個体の母親は、前世代の $N$ 人の中から一様乱数を用いて無作為に選出される。
+        \item その世代におけるミトコンドリア・イブを特定する（後述）。
+        \item 特定されたイブが、前世代までのイブと異なる場合、「新しいイブが出現した」と判定し、記録・出力を行う。
+        \item 不要となった古い世代の個体情報を破棄する。
+    \end{enumerate}
+    \item 最終結果として、イブの出現頻度（出現回数 / 総世代数）を計算し出力する。
+\end{enumerate}
+
+\subsection{ミトコンドリア・イブの特定}
+ある世代におけるミトコンドリア・イブとは、その世代の全員が共通して持つ女系祖先のうち、最も直近（世代番号が大きい）の個体である。これは計算機科学における「最小共通祖先（LCA: Lowest Common Ancestor）」の問題として扱える。
+\begin{itemize}
+    \item 集団の最初の個体を「仮の共通祖先」とする。
+    \item 「仮の共通祖先」と「次の個体」のLCAを求め、それを新しい「仮の共通祖先」とする。
+    \item これを集団の全員に対して繰り返した結果、最終的に残った個体がその世代のミトコンドリア・イブである。
+\end{itemize}
+
+\section{プログラムの説明}
+% 具体的な実装の説明
+
+\subsection{入力形式}
+プログラムはコマンドライン引数として以下の3つの値を受け取る。
+\begin{verbatim}
+$ ./kadai4a [N] [G] [seed]
+\end{verbatim}
+\begin{itemize}
+    \item \texttt{N}: 1世代あたりの人口（正の整数）。
+    \item \texttt{G}: シミュレーションを行う世代数の上限（正の整数）。
+    \item \texttt{seed}: 乱数生成器の初期化に用いる種（整数）。
+\end{itemize}
+
+\subsection{出力形式}
+ミトコンドリア・イブが更新されるたびに、そのイブの世代番号、ID、および出現した世代を出力する。
+最後に、全世代を通じたイブの出現頻度（Eve occurrence rate）を出力する。また、実行時間を計測し表示する。
+
+\subsection{データ構造}
+個体を表すために、構造体 \texttt{Person} を定義した。
+
+\begin{figure}[h]
+\centering
+\caption{Person構造体}
+\begin{verbatim}
+typedef struct Person {
+    long id;                // 世代内でのID
+    long generation;        // 世代番号
+    struct Person *mother;  // 母親へのポインタ
+    int ref_count;          // 参照カウンタ
+} Person;
+\end{verbatim}
+\end{figure}
+
+本プログラムでは、メモリ管理のために「参照カウンタ (\texttt{ref\_count})」を導入している。これは、その個体構造体が「他の個体（子供）」および「現役世代リスト」から合計で何箇所から参照されているかを保持する変数である。
+
+\subsection{大域変数}
+\begin{itemize}
+    \item \texttt{long num}: 1世代の人口 $N$。
+    \item \texttt{long maxGen}: 世代数の上限 $G$。
+\end{itemize}
+これらはプログラム全体で頻繁に参照される定数として扱われるため、大域変数とした。
+
+\subsection{関数の設計}
+各関数の役割は以下の通りである。
+\begin{itemize}
+    \item \texttt{Person* createPerson(long id, long gen, Person *mother)}: \\
+    動的にメモリを確保して新しい個体を生成する。同時に、母親の \texttt{ref\_count} をインクリメントする。
+    \item \texttt{void releasePerson(Person *p)}: \\
+    個体の参照カウントをデクリメントし、0になった場合はメモリを解放（free）する。
+    \item \texttt{Person* getLCA(Person *a, Person *b)}: \\
+    2つの個体ポインタを受け取り、その最小共通祖先を探索して返す。
+    \item \texttt{long nextMother()}: \\
+    メルセンヌ・ツイスタを用いて、次世代の母親となるIDを決定する（課題指定関数）。
+    \item \texttt{main}: \\
+    シミュレーションのメインループ、入出力、時間計測を管理する。
+\end{itemize}
+
+\subsection{関数の説明}
+特に重要な \texttt{getLCA} と \texttt{releasePerson} について説明する。
+
+\textbf{getLCA関数}では、2つの個体の世代が異なる場合、まず世代が若い（番号が大きい）方のポインタを、相手と同じ世代になるまで母親・祖母へと遡らせる。その後、両者のポインタが一致するまで同時に母親へと遡らせることで、LCAを特定している。
+
+\textbf{releasePerson関数}では、再帰的な解放処理を実装している。ある個体の参照カウントが0になり \texttt{free} される際、その個体が保持していた「母親へのポインタ」も不要になる。したがって、自身を解放する直前に母親に対して \texttt{releasePerson} を再帰的に呼び出す。これにより、子孫が途絶えた瞬間に、その家系図の不要な部分が一挙に解放される。
+
+\section{工夫した点}
+% アピールポイント
+本プログラムにおける最大の工夫は、\textbf{参照カウント方式による自動的なメモリ管理}である。
+家系図データは、世代が進むにつれて「現在生きている個体」の祖先のみが必要なデータとなり、子孫を残せなかった個体やその祖先は不要となる。しかし、どの個体がいつ不要になるかを静的に予測することは困難である。
+そこで、各個体に参照カウンタを持たせ、「誰からも必要とされなくなった（カウントが0になった）」時点で即座にメモリを解放する仕組みを構築した。これにより、巨大な $G$ や $N$ を指定しても、実際に系譜に繋がっている最小限のメモリのみを消費して動作し続けることが可能となった。
+
+\section{考察}
+% 実行結果の分析
+プログラムを実行し、人口 $N$ を変化させた際のミトコンドリア・イブの出現頻度を計測した。世代数 $G$ は $30000$ に固定した。
+
+\begin{table}[h]
+\centering
+\caption{人口 $N$ とミトコンドリア・イブ出現頻度の関係}
+% 下面这一行从 {rc} 改为了 {rrrc}，表示有4列
+\begin{tabular}{rrrc}
+\toprule
+人口 $N$ & 世代数の上限 $G$ & seed & 出現頻度 (Occurrence Rate) \\
+\midrule
+8 & 50 & 1 & 0.140000 \\
+10 & 50 & 2 & 0.080000 \\
+50 & 10000 & 11 & 0.019700 \\
+50 & 10000 & 12 & 0.020200 \\
+100 & 30000 & 21 & 0.011067 \\
+100 & 30000 & 22 & 0.010100 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+上記の表より、人口 $N$ が増加するにつれて、イブの出現頻度は低下する傾向が見られた。
+これは、集団のサイズが大きいほど、全個体の祖先が1人に収束する（コアレッセンス）までの平均世代数が長くなるためであると考えられる。集団遺伝学の理論においても、系譜が収束するまでの時間は個体数 $N$ に比例することが知られており、本シミュレーションの結果は理論と整合していると言える。
+
+\section{感想}
+% 主観的な感想
+構造体とポインタを組み合わせることで、家系図のような複雑なデータ構造を表現できる点が興味深かった。特に、メモリの動的確保と解放はC言語の難所であるが、参照カウントというアルゴリズムを用いることで、複雑な親子関係を持つデータの寿命を明確に管理できるようになった。デバッグ中は「セグメンテーション違反」に悩まされたが、ポインタの指す先を図に描いて整理することで解決できた。
+
+\section{作業工程}
+% 作業時間
+本課題にかかった作業時間は以下の通りである。
+
+\begin{table}[h]
+\centering
+\caption{作業工程と所要時間}
+\begin{tabular}{lr}
+\toprule
+作業内容 & 時間 (h) \\
+\midrule
+アルゴリズム設計（構造体の検討含む） & 4 \\
+プログラム設計（関数分割の検討） & 3 \\
+コーディング（エディタでの実装） & 7 \\
+デバッグ（コンパイルエラー・動作確認） & 4 \\
+レポート作成 & 6 \\
+\midrule
+合計 & 24 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{参考文献}
+\begin{thebibliography}{9}
+    \bibitem{textbook} 講義資料: ``プログラミングB 第4回レポート課題 A,'' 大阪大学, 2025.
+    
+    \bibitem{refenrence text} 松本眞, 西村拓士: ``Mersenne Twister: A 623-Dimensionally Equidistributed Uniform Pseudo-Random Number Generator,'' ACM Transactions on Modeling and Computer Simulation, Vol. 8, No. 1, pp.3–30, 1998.
+\end{thebibliography}
+
+\newpage
+\appendix
+\section*{付録: プログラムリスト}
+以下に作成したソースプログラム (\texttt{5036.c}) を示す。
+\begin{small}
+\begin{verbatim}
+
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<time.h>
+#include "MT.h"
+
+//大域変数
+long num, maxGen;
+
+/*
+Code 1
+*/
+typedef struct Person {
+    long id;
+    long generation;
+    struct Person *mother;
+    int ref_count;
+} Person;
+
+/*
+  娘を出産する母親を決定．
+  現役世代のi番目の女性が母親となる
+  編集厳禁．ここ以外でgenrand_*を使用しない．  
+*/
+long nextMother(){
+  return (long) (genrand_real3()*num);
+}
+
+/*
+Code 2
+*/
+Person* createPerson(long id, long gen, Person *mother) {
+    Person *p = (Person *)malloc(sizeof(Person));
+    if (p == NULL) {
+        fprintf(stderr, "Memory allocation failed.\n");
+        exit(1);
+    }
+    p->id = id;
+    p->generation = gen;
+    p->mother = mother;
+    p->ref_count = 1;
+    
+    if (mother != NULL) {
+        mother->ref_count++;
+    }
+    return p;
+}
+
+void releasePerson(Person *p) {
+    if (p == NULL) return;
+    
+    p->ref_count--;
+    if (p->ref_count == 0) {
+        // Recursive step: release the mother before freeing self
+        releasePerson(p->mother);
+        free(p);
+    }
+}
+
+// Lowest Common Ancestor
+Person* getLCA(Person *a, Person *b) {
+    if (a == NULL || b == NULL) return NULL;
+    
+    // Align generations first (move the younger one up)
+    while (a->generation > b->generation) {
+        a = a->mother;
+        if (a == NULL) return NULL;
+    }
+    while (b->generation > a->generation) {
+        b = b->mother;
+        if (b == NULL) return NULL;
+    }
+    
+    // Move both up until they meet
+    while (a != b) {
+        a = a->mother;
+        b = b->mother;
+        if (a == NULL || b == NULL) return NULL;
+    }
+    
+    return a;
+}
+
+int main(int argc, char **argv){
+  long times=0;
+  clock_t t1,t2;
+  char *th;
+
+  /*
+  Code 3
+  */
+  long i, gen;
+  Person **current_pop, **next_pop;
+  Person *current_eve = NULL, *prev_eve = NULL;
+
+  long eveGen = 0, eveId = 0, foundGen = 0;
+
+  /*******初期設定*******/
+  if(argc != 4){
+    printf("this program requires exactly three arguments\n");
+    printf("arg1 = num, arg2 = max_gen, arg3 = seed\n");
+    exit(-1);
+  }
+  num = atol(argv[1]); //1世代の人口N．大域変数．
+  maxGen = atol(argv[2]); //世代数の上限G．大域変数．
+  int seed = atoi(argv[3]);
+  init_genrand(seed);//乱数生成の初期化．【編集厳禁!】
+  t1 = clock();
+  /********** ***********/
+
+  /*
+  Code 4
+  */
+  current_pop = (Person **)malloc(sizeof(Person*) * num);
+  next_pop = (Person **)malloc(sizeof(Person*) * num);
+  
+  if (!current_pop || !next_pop) {
+    exit(1);
+  }
+
+  // Initialize Gen 0
+  for (i = 0; i < num; i++) {
+    current_pop[i] = createPerson(i, 0, NULL);
+  }
+
+  // Main Simulation Loop
+  for (gen = 1; gen < maxGen; gen++) {
+      
+    // 1. Create Next Generation
+    for (i = 0; i < num; i++) {
+        long mom_idx = nextMother();
+        next_pop[i] = createPerson(i, gen, current_pop[mom_idx]);
+    }
+
+    // 2. Find Mitochondrial Eve for this generation
+    // Start with the first person's ancestor as the candidate
+    current_eve = next_pop[0]; 
+      
+    // Calculate LCA with every other person in the population
+    for (i = 1; i < num; i++) {
+        current_eve = getLCA(current_eve, next_pop[i]);
+        if (current_eve == NULL) break; // No common ancestor yet
+    }
+
+    // 3. Check if Eve has changed or appeared
+    if (current_eve != NULL) {
+        int is_new_eve = 0;
+        
+        if (prev_eve == NULL) {
+            is_new_eve = 1; // First time Eve appears
+        } else if (current_eve != prev_eve) {
+            is_new_eve = 1; // Eve has changed
+        }
+
+        if (is_new_eve) {
+        // Update tracking variables
+        prev_eve = current_eve;
+        eveGen = current_eve->generation;
+        eveId = current_eve->id;
+        foundGen = gen;
+             
+            // 4. Output
+            /*
+            ミトコンドリアイブを見つけるたびに下記要領で出力を行う．
+            eveGenはミトコンドリア・イブの世代番号（0から始まる）を示し， eveIDはその世代のなかでのミトコンドリア・イブのIDを表す．
+            foundGenはミトコンドリア・イブが出現した世代を表す．
+            */ 
+            times++;
+            if((times % 10 == 1) && (times % 100 !=11)){
+            th = "st";
+            }else if((times % 10 == 2) && (times % 100 !=12)){
+            th = "nd";
+            }else if((times % 10 == 3) && (times % 100 !=13)){
+            th = "rd";
+            }
+            else{
+            th = "th";
+            }
+            printf("The %ld%s Eve (%ld,%ld) occurs at %ld th generation\n", times,th,eveGen,eveId,foundGen);
+        }
+    }
+
+    // 5. Cleanup: Release current generation
+    for (i = 0; i < num; i++) {
+        releasePerson(current_pop[i]);
+    }
+
+    // Swap pointers for next iteration
+    Person **temp = current_pop;
+    current_pop = next_pop;
+    next_pop = temp;
+  }
+  
+  // Final cleanup for the last generation
+  for (i = 0; i < num; i++) {
+      releasePerson(current_pop[i]);
+  }
+  free(current_pop);
+  free(next_pop);
+
+  /*
+    最後にミトコンドリアイブ の出現頻度を出力する．
+    timesはミトコンドリアイブ の出現回数を記憶する変数． 
+  */
+
+  printf("Eve occurrence rate is %f\n",(double) times/maxGen);
+
+  t2 = clock();
+  printf("Done within ### %f sec . ###\n", (double) (t2-t1)/CLOCKS_PER_SEC);
+  
+  return 0;
+}
+
+\end{verbatim}
+\end{small}
+
+\end{document}
+

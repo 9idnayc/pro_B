@@ -1,0 +1,203 @@
+\documentclass[a4paper,12pt]{jsarticle}
+
+% 明朝体指定（標準）
+\usepackage{otf}
+
+% 図表やコードを扱うためのパッケージ
+\usepackage{graphicx}
+\usepackage{verbatim}
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{array}
+
+% ページ番号を下中央
+\pagestyle{plain}
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 表紙
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{titlepage}
+\centering
+
+\vspace*{4cm}
+
+{\Large プログラミングB レポート \par}
+\vspace{1cm}
+
+{\Large 課題２（再帰下降構文解析による電卓）\par}
+
+\vspace{3cm}
+
+提出年月日：令和 7 年 12 月 xx 日 \\
+教員名：武政 淳二 先生 \\[1cm]
+
+提出者：\\
+学生番号：XXXXXXX \\
+氏名：山田 太郎
+
+\end{titlepage}
+\setcounter{page}{1}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{課題内容}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+本レポートでは，「課題２」に取り組んだ。
+具体的には，中置記法で与えられた算術式に対して，
+再帰下降構文解析を用いて四則演算・括弧・指数演算を解析し，
+値を計算する電卓プログラムを作成した。%
+発展課題として，小数の扱い，指数演算，一元負号の処理，
+および文法エラー検出を実装した。
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{アルゴリズムの説明}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+本課題では，中置記法の式を次の文法に基づいて解析する
+再帰下降構文解析法を用いた。
+
+\begin{itemize}
+    \item $expression ::= term \ \{ (+ \mid -)\ term \}$
+    \item $term ::= factor\ \{ (* \mid /)\ factor \}$
+    \item $factor ::= constant \mid (expression) \mid -factor \mid factor\ ^\ digit$
+    \item $constant ::= digits\ [.\ digits]$
+\end{itemize}
+
+式を「項」，項を「因子」に分解し，
+各規則を関数に対応させ，
+左から順に入力文字を読み進めながら再帰的に評価する。
+
+アルゴリズムの要点は次の通りである。
+
+\begin{itemize}
+    \item 全体の計算は $expression$ を入口とする。
+    \item $term$ が乗除を，$factor$ が括弧・指数・一元負号を処理する。
+    \item 文字列の走査には 1 文字の前読み（lookahead）を用い，
+    関数 \verb|next()| により現在文字 \verb|current_char| を更新する。
+    \item 文法に合致しない文字を検出した場合は，入力位置とともに
+    エラーを出力して終了する。
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{プログラムの説明}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{入力形式}
+本プログラムは，標準入力から 1 行の算術式を読み込む。
+空白の混入は想定しない。
+
+\subsection{出力形式}
+式が正しい場合は計算結果を実数で出力し，
+除算におけるゼロ除算では
+\verb|Zero division occurs.| と表示し終了する。
+文法エラーの場合は，
+\verb|Syntax error occurs at the X-th character.| と出力する。
+
+\subsection{データ構造}
+入力式は文字配列 \verb|input[]| に格納し，
+現在位置を整数 \verb|char_index|，
+現在の文字を \verb|current_char| として保持する。
+
+\subsection{大域変数}
+\begin{verbatim}
+char input[MAX_EXPRESSION_LENGTH];
+int char_index;
+char current_char;
+\end{verbatim}
+
+\subsection{関数の設計}
+
+関数間の呼び出し関係は図\ref{fig:callgraph}の通りである。
+
+\begin{figure}[h]
+\centering
+\begin{verbatim}
+                    +-------------+
+                    | expression  |
+                    +------+------+ 
+                           |
+                           v
+                    +-------------+
+                    |    term     |
+                    +------+------+ 
+                           |
+                           v
+                    +-------------+
+                    |   factor    |
+                    +------+------+ 
+                           |
+                           v
+                    +-------------+
+                    |  constant   |
+                    +-------------+
+\end{verbatim}
+\caption{関数呼び出し関係図}
+\label{fig:callgraph}
+\end{figure}
+
+\subsection{関数の説明}
+本節では，各関数がどのように文法規則に対応し，
+入力をどのように消費するかを説明する。  
+（ここに \verb|expression()|、\verb|term()|、\verb|factor()| の設計を追記）
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{工夫した点}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+（例）
+\begin{itemize}
+    \item 文法エラー位置を 1-based index で正確に表示できるように，
+    \verb|next()| の設計を工夫した。
+    \item 括弧・一元負号・指数など，
+    優先順位の高い構文要素を自然に扱うため，関数分割を徹底した。
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{考察}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+（例）
+\begin{itemize}
+    \item 再帰下降構文解析は実装が簡潔で，
+    構文規則の変更に強く拡張性が高い。
+    \item 本課題では演算子優先順位が自然に表現される構造を実現した。
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{感想}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+（短めに）
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{作業工程}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+（例）
+\begin{itemize}
+    \item アルゴリズム設計：3 時間
+    \item コーディング：6 時間
+    \item デバッグ：3 時間
+    \item レポート作成：3 時間
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{参考文献}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{itemize}
+    \item プログラミングB「レポートの書き方」資料:contentReference[oaicite:1]{index=1}
+    \item ChatGPT（使用部分を"*生成 AI*" として明示）
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\appendix
+\section*{付録：プログラムリスト}
+
+\begin{verbatim}
+（ここに C プログラムを貼る）
+\end{verbatim}
+
+\end{document}

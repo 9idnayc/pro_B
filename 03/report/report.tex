@@ -1,0 +1,223 @@
+\documentclass[a4paper,dvipdfmx]{jsarticle}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{graphicx}
+\usepackage{url}
+% \usepackage{listings, jlisting} % 原代码：如果不确定是否安装了jlisting，请先用下面这一行
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{geometry}
+\usepackage{float}
+
+\geometry{left=25mm, right=25mm, top=30mm, bottom=30mm}
+
+\lstset{
+  language=C,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\bfseries\color{blue},
+  commentstyle=\itshape\color{green!40!black},
+  stringstyle=\color{red},
+  frame=tb,
+  numbers=left,
+  numberstyle=\tiny,
+  breaklines=true,
+  columns=fixed,
+  basewidth=0.5em,
+  captionpos=t
+}
+
+\newcommand{\reportTitle}{プログラミングB レポート}
+\newcommand{\assignmentNum}{課題3 (住所検索)}
+\newcommand{\submitDate}{令和8年1月8日}
+\newcommand{\teacherName}{武政 淳二 先生}
+\newcommand{\studentID}{09B25036}
+\newcommand{\studentName}{HU XIANDONG}
+
+\begin{document}
+
+% ============================================================
+% 1. 表纸 (Cover Page)
+% ============================================================
+\begin{titlepage}
+    \centering
+    \vspace*{3cm}
+    
+    {\Huge \reportTitle}
+    
+    \vspace{2cm}
+    
+    {\huge \assignmentNum}
+    
+    \vspace{4cm}
+    
+    {\Large 提出年月日: \submitDate}
+    
+    \vspace{1cm}
+    
+    {\Large 担当教員: \teacherName}
+    
+    \vspace{4cm}
+    
+    {\Large 提出者}
+    
+    \vspace{1cm}
+    
+    {\Large 学籍番号: \studentID}
+    
+    \vspace{0.5cm}
+    
+    {\Large 氏名: \studentName}
+    
+\end{titlepage}
+
+% ============================================================
+% 正文
+% ============================================================
+\setcounter{page}{1}
+
+% ------------------------------------------------------------
+\section{課題内容}
+本課題では、配布された郵便番号データ（CSVファイル）を読み込み、構造体を用いてメモリ上に格納した上で、以下の検索機能を実現するプログラムを作成した。
+
+\begin{itemize}
+    \item \textbf{検索1（郵便番号検索）}: 郵便番号を入力し、対応する住所を出力する。
+    \item \textbf{検索2（住所検索）}: 住所の一部を入力し、該当する住所一覧を郵便番号順に出力する。
+    \item \textbf{発展課題（絞り込み検索）}: 検索2の結果に対して、さらに別のキーワードで絞り込みを行う。
+\end{itemize}
+
+% ------------------------------------------------------------
+\section{アルゴリズムの説明}
+\subsection{前処理（データの読み込み）}
+テキストファイルからデータを一行ずつ読み込み、カンマ区切りの項目（郵便番号、都道府県、市区町村、町域）を抽出する。抽出した各項目を結合して一つの住所文字列とし、郵便番号とともに構造体の配列に順次格納する。CSVファイル内のダブルクォーテーションは読み込み時に除外処理を行う。
+
+\subsection{検索アルゴリズム}
+\begin{enumerate}
+    \item \textbf{郵便番号検索}:
+    構造体配列を先頭から順に走査し（線形探索）、入力された郵便番号と完全に一致するデータを探索する。一致した場合、その住所を出力する。
+    
+    \item \textbf{住所検索とソート}:
+    構造体配列を全走査し、住所文字列に入力されたキーワードが含まれているか（部分一致）を判定する。
+    一致したデータのインデックスを別のリスト（ヒットリスト）に保存する。
+    全データの走査終了後、ヒットリスト内のデータを郵便番号の昇順になるようにバブルソートを用いて並べ替える。
+    
+    \item \textbf{絞り込み検索（発展課題）}:
+    住所検索で得られたヒットリストに対してのみ走査を行う。新たなキーワードが含まれるデータのみを抽出し、ヒットリストを更新する。これにより、検索範囲を段階的に縮小させる。
+\end{enumerate}
+
+% ------------------------------------------------------------
+\section{プログラムの説明}
+
+\subsection{入力形式}
+コマンドライン引数、または標準入力から検索モードとクエリを受け取る。
+\begin{itemize}
+    \item ファイルモード: \texttt{./kadai3 input.txt}
+    \item インタラクティブモード: \texttt{./kadai3} (実行後にメニューから選択)
+\end{itemize}
+
+\subsection{出力形式}
+検索結果は以下のフォーマットで標準出力に行う。余分な空白は含めない。
+\begin{verbatim}
+[郵便番号]:[住所]
+例: 5650871:大阪府吹田市山田丘
+\end{verbatim}
+
+\subsection{データ構造}
+住所データを格納するために、以下の構造体 \texttt{Address} を定義した。
+\begin{verbatim}
+struct Address {
+    char code[9];     // 郵便番号
+    char addr[200];   // 住所（都道府県+市町村+町域）
+};
+\end{verbatim}
+
+\subsection{大域変数}
+\begin{itemize}
+    \item \texttt{struct Address table[MAX\_SIZE]}: 全住所データを保持する配列。
+    \item \texttt{long datasize}: 読み込んだデータの総数。
+    \item \texttt{long hit\_index[MAX\_SIZE]}: 検索にヒットしたデータのインデックス配列。
+    \item \texttt{long hit\_size}: 現在ヒットしているデータの件数。
+\end{itemize}
+
+\subsection{関数の設計}
+主要な関数は以下の通りである。
+\begin{itemize}
+    \item \texttt{void scan()}: CSVファイルの読み込みと構造体への格納を行う。
+    \item \texttt{void code\_search()}: 郵便番号による完全一致検索を行う。
+    \item \texttt{void address\_search()}: 文字列による部分一致検索とソートを行う。
+    \item \texttt{void refinement()}: 発展課題。現在の検索結果に対して絞り込みを行う。
+\end{itemize}
+
+\subsection{関数の説明}
+\texttt{scan} 関数では、\texttt{fscanf} の書式指定文字列を工夫し、CSVファイルに含まれるダブルクォーテーション \texttt{"} を読み飛ばす処理を実装した。
+\texttt{address\_search} 関数では、\texttt{strstr} 関数を用いて部分一致判定を行い、ヒットしたインデックスを保存した後、単純交換法（バブルソート）を用いて郵便番号順に並べ替えている。
+
+% ------------------------------------------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{工夫した点}
+% [cite: 188] 这里的重点是你在开发过程中遇到的问题和解决办法
+\begin{enumerate}
+    \item \textbf{CSV読み込みの堅牢性}: 
+    配布されたデータには各フィールドにダブルクォーテーションが含まれていたため、テンプレートの \texttt{fscanf} を修正し、\texttt{\textbackslash"\%[\textasciicircum\textbackslash"]\textbackslash"} の形式を用いることで、プログラム側で引用符を除去しながら読み込むように工夫した。これにより、検索時の文字列比較が正しく機能するようにした。
+    
+    \item \textbf{絞り込み検索の効率化（発展課題）}:
+    絞り込み検索 (\texttt{refinement}) において、全データ (\texttt{table}) を再走査するのではなく、前回の検索結果である \texttt{hit\_index} 配列のみを走査対象とした。これにより、データ量が多い場合でも2回目以降の検索が高速に行えるように工夫した。
+\end{enumerate}
+
+% ------------------------------------------------------------
+\section{考察}
+\subsection{計算量について}
+本プログラムの検索アルゴリズムは線形探索であるため、データ数を $N$ とすると、時間計算量は $O(N)$ となる。データ数が約12万件であるため、現代のPCでは十分高速に動作したが、データ数が数百万件に増えた場合は、ハッシュ法や二分探索木などのデータ構造を検討する必要があると考えられる。
+
+\subsection{ソートについて}
+現在は単純なバブルソート ($O(M^2)$, $M$はヒット数) を利用している。ヒット数が少ない場合は問題ないが、「大阪」のようにヒット数が多いクエリの場合、ソートに時間がかかる可能性がある。クイックソート ($O(M \log M)$) などを利用すれば改善が見込める。
+
+% ------------------------------------------------------------
+\section{感想}
+% C语言的文件操作比想象中复杂，特别是处理文字编码和CSV格式的时候。但是看到搜索结果正确显示时很有成就感。
+CSVファイルの読み込みにおいて、Excelで保存するとフォーマットが変わってしまったり、文字コード（UTF-8とShift-JIS）の違いで文字化けが発生したりと、本質的なロジック以外の部分で苦労した。しかし、これらのトラブルシューティングを通して、文字コードやファイルフォーマットに対する理解が深まった。発展課題の絞り込み検索まで実装でき、実用的なプログラムに近づいたと感じた。
+
+% ------------------------------------------------------------
+
+\section{作業工程}
+% [cite: 194]
+各工程に要した時間は以下の通りである。
+
+\begin{table}[H]
+\centering
+\caption{作業工程と所要時間}
+\begin{tabular}{|l|r|}
+\hline
+\multicolumn{1}{|c|}{作業内容} & \multicolumn{1}{c|}{時間 (時間)} \\ \hline
+アルゴリズム設計 & 2.0 \\ \hline
+プログラム実装 (基本課題) & 6.0 \\ \hline
+デバッグ (CSV読み込み・文字コード) & 3.0 \\ \hline
+発展課題 (絞り込み検索) 実装 & 4.0 \\ \hline
+レポート作成 & 5.0 \\ \hline
+\textbf{合計} & \textbf{20.0} \\ \hline
+\end{tabular}
+\end{table}
+
+% ------------------------------------------------------------
+\section{参考文献}
+% [cite: 201]
+\begin{thebibliography}{9}
+    \bibitem{textbook} 担当教員 武政淳二: ``第3回レポート課題 (プログラミングB\_課題3\_R7.pdf)'', 令和7年12月4日.
+    
+    \bibitem{postaldata} 日本郵便株式会社: ``郵便番号データダウンロード'', \url{http://www.post.japanpost.jp/zipcode/dl/kogaki-zip.html}, (参照 2026-01-01).
+\end{thebibliography}
+
+% ============================================================
+% 附录
+% ============================================================
+\newpage
+\appendix
+\section*{付録: プログラムリスト}
+以下に作成したソースプログラム (\texttt{5036.c}) を示す。
+
+% 这里使用 listings 包插入你的代码
+% 注意：你的代码里如果有中文注释，可能会报错。建议在 latex 里只保留日文或英文注释。
+\lstinputlisting[caption=5036.c]{5036.c}
+
+
+\end{document}

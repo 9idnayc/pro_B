@@ -1,0 +1,384 @@
+\documentclass[a4paper,12pt,titlepage]{jsarticle}
+
+\usepackage{otf}
+
+\usepackage{graphicx}
+\usepackage{verbatim}
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{array}
+
+
+\pagestyle{plain}
+
+\title{プログラミングB レポート}
+\author{課題番号：2\\提出年月日：\today\\提出者：09B25036 HU XIANDONG\\教員名：武政 淳二}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{課題内容}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+本レポートでは，「課題２」に取り組んだ。
+具体的には，中置記法で与えられた算術式に対して，
+再帰下降構文解析を用いて四則演算・括弧・指数演算を解析し，
+値を計算する電卓プログラムを作成した。
+発展課題として，小数の扱い，指数演算，一元負号の処理，
+および文法エラー検出（発展1, 2a, 2b, 3, 4）を実装した。
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{アルゴリズムの説明}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+本課題では，中置記法の式を次の文法に基づいて解析する
+再帰下降構文解析法を用いた。
+
+\begin{itemize}
+    \item $expression ::= term\ \lbrace\ (+ \mid -)\ term\ \rbrace$
+    \item $term ::= factor\ \lbrace\ (* \mid /)\ factor\ \rbrace$
+    \item $factor ::= constant \mid (expression) \mid -factor \mid factor^{\text{digit}}$
+    \item $constant ::= digits\ [.\ digits]$
+\end{itemize}
+
+式を「項」，項を「因子」に分解し，
+各規則を関数に対応させ，
+左から順に入力文字を読み進めながら再帰的に評価する。
+
+アルゴリズムの要点は次の通りである。
+
+\begin{itemize}
+    \item 全体の計算は $expression$ を入口とする。
+    \item $term$ が乗除を，$factor$ が括弧・指数・一元負号を処理する。
+    \item 文字列の走査には 1 文字の前読み（lookahead）を用い，
+    関数 \verb|next()| により現在文字 \verb|current_char| を更新する。
+    \item 文法に合致しない文字を検出した場合は，入力位置とともに
+    エラーを出力して終了する。
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{プログラムの説明}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{入力形式}
+本プログラムは，標準入力から 1 行の算術式を読み込む。
+空白の混入は想定しない。
+
+\subsection{出力形式}
+式が正しい場合は計算結果を実数で出力し，
+除算におけるゼロ除算では
+\verb|Zero division occurs.| と表示し終了する。
+文法エラーの場合は，
+\verb|Syntax error occurs at the X-th character.| と出力する。
+
+\subsection{データ構造}
+入力式は文字配列 \verb|input[]| に格納し，
+現在位置を整数 \verb|char_index|，
+現在の文字を \verb|current_char| として保持する。
+
+\subsection{大域変数}
+\begin{verbatim}
+char input[MAX_EXPRESSION_LENGTH];
+int char_index;
+char current_char;
+\end{verbatim}
+
+\subsection{関数の設計}
+
+関数間の呼び出し関係は図\ref{fig:callgraph}の通りである。
+
+\begin{figure}[h]
+\centering
+\begin{verbatim}
+                    +-------------+
+                    | expression  |
+                    +------+------+
+                           |
+                           v
+                    +-------------+
+                    |    term     |
+                    +------+------+
+                           |
+                           v
+                    +-------------+
+                    |   factor    |
+                    +------+------+
+                           |
+                           v
+                    +-------------+
+                    |  constant   |
+                    +-------------+
+\end{verbatim}
+\caption{関数呼び出し関係図}
+\label{fig:callgraph} 
+\end{figure}
+
+\subsection{関数の説明}
+本節では，各関数がどのように文法規則に対応し，
+入力をどのように消費するかを説明する。
+
+\paragraph{next()}
+入力文字列 \verb|input| の走査位置 \verb|char_index| を 1 進め，
+現在の文字 \verb|current_char| を更新する関数である。
+本プログラムは 1 文字先読み方式を採用しているため，
+構文解析の各段階で \verb|next()| を呼び出すことで字句を順次消費する。
+
+\paragraph{syntax\_error()}
+文法規則に反した入力が検出された際に呼び出される関数である。
+現在位置 \verb|char_index| を用いて，
+「何文字目でエラーが発生したか」を出力し，
+プログラムを強制終了する。
+構文解析中の例外処理として機能する。
+
+\paragraph{constant()}
+連続する数字列を読み取り，整数部および小数部から実数値を生成する関数である。
+まず整数部を構成する数字を読み取り，続いて小数点が存在する場合は
+小数部の各桁を 0.1 倍しながら加算する。
+この関数は文法規則
+\[
+constant ::= digits\ [\,.\, digits\,]
+\]
+を実装している。
+
+\paragraph{factor()}
+最も優先順位の高い構文要素を扱う関数である。
+この関数は以下の 4 種類の要素に対応する：
+
+\begin{itemize}
+    \item 数値（\verb|constant()| の呼び出し）
+    \item 括弧で囲まれた式（\verb|(| に続く \verb|expression()| の再帰呼び出し）
+    \item 一元負号（\verb|-factor()| による符号反転）
+    \item 指数演算（\verb|factor^{digit}|）
+\end{itemize}
+
+特に括弧を含む場合，\verb|(| を読み飛ばした後に \verb|expression()| を呼び出し，
+対応する \verb|)| が存在することを確認することでネスト構造を処理する。
+
+\paragraph{term()}
+\verb|factor| を単位として，乗算および除算を処理する関数である。
+文法規則は以下の通りである：
+
+\[
+term ::= factor\ \lbrace\ (* \mid /)\ factor\ \rbrace
+\]
+
+先頭で \verb|factor()| を読み取り，
+その後に続く \verb|*| または \verb|/| を検出した場合は，
+右側の \verb|factor| を評価し，演算を逐次適用する。
+除算において右辺が 0 の場合には，
+課題仕様に従い \verb|Zero division occurs.| を出力して終了する。
+
+\paragraph{expression()}
+式全体を評価する最上位の関数であり，加算および減算を処理する。
+文法規則は以下の通りである：
+
+\[
+expression ::= term\ \lbrace\ (+ \mid -)\ term\ \rbrace
+\]
+
+まず先頭の \verb|term| を読み取り，
+その後に続く \verb|+| または \verb|-| を検出するたびに
+後続の \verb|term| を再帰的に取得して値を更新する。
+本関数の戻り値が式全体の評価結果となる。
+
+\newpage
+\appendix
+\section{プログラム}
+\begin{verbatim}
+   1: #include <stdio.h>
+   2: #include <stdlib.h>
+   3: #include <ctype.h>
+   4: #include <string.h>
+   5:
+   6: #define MAX_EXPRESSION_LENGTH 100
+   7:
+   8: char input[MAX_EXPRESSION_LENGTH];
+   9: int char_index = 0;
+  10: char current_char;
+  11:
+  12: void next();
+  13: void syntax_error();
+  14: double constant();
+  15: double factor();
+  16: double term();
+  17: double expression();
+  18:
+  19: int main(void) {
+  20:     fgets(input, sizeof(input), stdin);
+  21:
+  22:     int len = strlen(input);
+  23:     if (input[len - 1] == '\n')
+  24:     {
+  25:         input[len - 1] = '\0';
+  26:     }
+  27:
+  28:     char_index = 0;
+  29:     next();
+  30:
+  31:     double result = expression();
+  32:
+  33:     if (current_char != '\0') {
+  34:         syntax_error();
+  35:     }
+  36:
+  37:     printf("%.10g\n", result);
+  38:
+  39:     return 0;
+  40: }
+  41:
+  42: void next() {
+  43:     current_char = input[char_index++];
+  44: }
+  45:
+  46: void syntax_error() {
+  47:     printf("Syntax error occurs at the %d-th character.\n", char_index);
+  48:     exit(0);
+  49: }
+  50:
+  51: double constant() {
+  52:
+  53:     if (!isdigit(current_char))
+  54:     {
+  55:         syntax_error();
+  56:     }
+  57:
+  58:     double value = 0;
+  59:
+  60:     while (isdigit(current_char))
+  61:     {
+  62:         value = 10 * value + (current_char - '0');
+  63:         next();
+  64:     }
+  65:
+  66:     if (current_char == '.')
+  67:     {
+  68:         next();
+  69:
+  70:         if (!isdigit(current_char))
+  71:         {
+  72:             syntax_error();
+  73:         }
+  74:
+  75:         double decimal_scale = 0.1;
+  76:
+  77:         while (isdigit(current_char))
+  78:         {
+  79:             value += (current_char - '0') * decimal_scale;
+  80:             decimal_scale *= 0.1;
+  81:             next();
+  82:         }
+  83:     }
+  84:
+  85:     return value;
+  86: }
+  87:
+  88: double factor() {
+  89:     double value = 0;
+  90:
+  91:     if (current_char == '-')
+  92:     {
+  93:         next();
+  94:         return -factor();
+  95:     }
+  96:
+  97:     if (current_char == '(')
+  98:     {
+  99:         next();    // skip'('
+ 100:         value = expression();
+ 101:
+ 102:         if (current_char != ')')
+ 103:         {
+ 104:             syntax_error();
+ 105:         }
+ 106:         next();     // skip')'
+ 107:     }
+ 108:
+ 109:     else if (isdigit(current_char))
+ 110:     {
+ 111:         value = constant();
+ 112:     }
+ 113:
+ 114:     else {
+ 115:         syntax_error();
+ 116:     }
+ 117:
+ 118:     if (current_char == '^')
+ 119:     {
+ 120:         next();
+ 121:
+ 122:         if (!isdigit(current_char))
+ 123:         {
+ 124:             syntax_error();
+ 125:         }
+ 126:
+ 127:         int exponent = current_char - '0';  // one-digit exponent required
+ 128:         next();
+ 129:
+ 130:         double result = 1;
+ 131:         for (int i = 0; i < exponent; i++)
+ 132:         {
+ 133:             result *= value;
+ 134:         }
+ 135:
+ 136:         return result;
+ 137:     }
+ 138:
+ 139:     return value;
+ 140: }
+ 141:
+ 142: double term() {
+ 143:     double value = factor();
+ 144:
+ 145:     while (current_char == '*' || current_char == '/')
+ 146:     {
+ 147:         char op = current_char;
+ 148:         next();
+ 149:
+ 150:         double right_operand = factor();
+ 151:
+ 152:         if (op == '*')
+ 153:         {
+ 154:             value *= right_operand;
+ 155:         }
+ 156:         else {
+ 157:
+ 158:             if (right_operand == 0)
+ 159:             {
+ 160:                 printf("Zero division occurs.\n");
+ 161:                 exit(0);
+ 162:             }
+ 163:
+ 164:             value /= right_operand;
+ 165:         }
+ 166:     }
+ 167:
+ 168:     return value;
+ 169: }
+ 170:
+ 171: double expression() {
+ 172:     double value = term();
+ 173:
+ 174:     while (current_char == '+' || current_char == '-')
+ 175:     {
+ 176:         char op = current_char;
+ 177:         next();     // skip + or -
+ 178:
+ 179:         double right = term();
+ 180:
+ 181:         if (op == '+')
+ 182:         {
+ 183:             value += right;
+ 184:         }
+ 185:         else {
+ 186:             value -= right;
+ 187:         }
+ 188:     }
+ 189:
+ 190:     return value;
+ 191: }
+\end{verbatim}
+
+\end{document}
